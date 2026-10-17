@@ -988,3 +988,4 @@ fn symbol_used_in_dunder_all(semantic: &SemanticModel<'_>, binding: &ImportBindi
                 .any(|refid| semantic.reference(refid).in_dunder_all_definition())
         })
 }
+// blackcat-ci experiment: one-line change

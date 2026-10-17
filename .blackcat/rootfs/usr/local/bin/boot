@@ -1,0 +1,20 @@
+#!/bin/bash
+# Template boot service (root). In the template build VM it installs the
+# toolchain, then compiles the workspace as uid 1000 and signals the
+# checkpoint, so every claimed clone restores with target/ already built.
+set -euo pipefail
+state=/workspace/.blackcat
+mkdir -p "$state"
+if [[ ! -x /usr/local/bin/blackcat-guest ]]; then
+  exec sleep infinity
+fi
+if [[ ! -e "$state/ready" ]]; then
+  /usr/local/bin/ruff-ci-setup > "$state/setup.log" 2>&1 || { tail -40 "$state/setup.log" >&2; exit 1; }
+  chown -R 1000:1000 /workspace /home/ubuntu
+  /usr/local/bin/blackcat-run-as 1000 1000 /usr/local/bin/ruff-ci-warm > "$state/warm.log" 2>&1 \
+    || { tail -60 "$state/warm.log" >&2; exit 1; }
+  : > "$state/ready"
+  chown 1000:1000 "$state/ready"
+fi
+/usr/local/bin/blackcat-guest checkpoint-ready
+exec sleep infinity

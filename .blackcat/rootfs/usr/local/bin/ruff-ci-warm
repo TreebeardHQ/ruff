@@ -1,0 +1,24 @@
+#!/bin/bash
+# Toolchain, sources and a warm build of everything the Linux CI jobs compile
+# (uid 1000, template build VM only).
+set -euxo pipefail
+SECONDS=0
+curl -fsSL --retry 5 https://sh.rustup.rs | sh -s -- -y --profile minimal \
+  --default-toolchain 1.99.0 --component clippy --component rustfmt
+git init -q /workspace/ruff && cd /workspace/ruff
+git remote add origin https://github.com/TreebeardHQ/ruff.git
+git fetch -q --depth=1 origin "$(cat /etc/ruff-ci/sha)" && git checkout -q FETCH_HEAD
+cargo fetch --locked
+uv python install "$PYTHON_VERSION"
+uv sync --only-dev
+echo "setup done at ${SECONDS}s"
+time cargo nextest run --all-features --no-run --cargo-quiet
+echo "tests built at ${SECONDS}s"
+time cargo build -p ty
+time cargo clippy --workspace --all-targets --all-features --locked
+echo "clippy built at ${SECONDS}s"
+curl -fsSL --retry 5 "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
+time cargo hawk check --target-dir target/hawk -D warnings
+echo "hawk built at ${SECONDS}s"
+du -sh target "$CARGO_HOME" "$RUSTUP_HOME" "$UV_CACHE_DIR" || true
+df -h /

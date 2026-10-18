@@ -5,12 +5,17 @@ MOLD_VERSION=3.0.0 NEXTEST_VERSION=0.9.148 INSTA_VERSION=1.49.0 UV_VERSION=0.13.
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends build-essential ca-certificates clang curl git jq \
-  pkg-config python3 tar unzip xz-utils zstd
+  pkg-config python3 tar unzip xz-utils zstd libicu74 libkrb5-3 libssl3t64 libunwind8 libuuid1 zlib1g
 rm -rf /var/lib/apt/lists/*
 gh_dl() { curl -fsSL --retry 5 --retry-all-errors "https://github.com/$1"; }
 gh_dl "rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-x86_64-linux.tar.gz" | tar -xz --strip-components=1 -C /usr/local
 gh_dl "nextest-rs/nextest/releases/download/cargo-nextest-${NEXTEST_VERSION}/cargo-nextest-${NEXTEST_VERSION}-x86_64-unknown-linux-gnu.tar.gz" | tar -xz -C /usr/local/bin
 gh_dl "mitsuhiko/insta/releases/download/${INSTA_VERSION}/cargo-insta-x86_64-unknown-linux-gnu.tar.xz" | tar -xJ --strip-components=1 -C /usr/local/bin
 gh_dl "astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" | tar -xz --strip-components=1 -C /usr/local/bin
-mkdir -p /workspace /home/ubuntu
+RUNNER_VERSION=2.337.0 RUNNER_SHA256=70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613
+gh_dl "actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" > /tmp/runner.tar.gz
+echo "${RUNNER_SHA256}  /tmp/runner.tar.gz" | sha256sum --check --status
+mkdir -p /workspace /home/ubuntu /opt/actions-runner
+tar -xzf /tmp/runner.tar.gz -C /opt/actions-runner && rm /tmp/runner.tar.gz
+chown -R 1000:1000 /opt/actions-runner
 id -u ubuntu | grep -qx 1000

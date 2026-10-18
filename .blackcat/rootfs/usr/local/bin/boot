@@ -17,4 +17,12 @@ if [[ ! -e "$state/ready" ]]; then
   chown 1000:1000 "$state/ready"
 fi
 /usr/local/bin/blackcat-guest checkpoint-ready
-exec sleep infinity
+# A clone claimed by the GitHub Actions connector receives a single-use JIT
+# config and its egress decision; a directly claimed clone never does and
+# simply stays up for EXEC.
+while [[ ! -s "$state/jit-config" || ! -s "$state/proxy-url" ]]; do sleep 0.2; done
+[[ "$(cat "$state/proxy-url")" == direct ]] || { echo 'only direct egress is supported' >&2; exit 1; }
+jit=$(cat "$state/jit-config")
+rm -f "$state/jit-config"
+cd /opt/actions-runner
+exec /usr/local/bin/blackcat-run-as 1000 1000 ./run.sh --jitconfig "$jit"

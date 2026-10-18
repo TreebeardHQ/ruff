@@ -29,7 +29,8 @@ time cargo clippy -p ruff_wasm -p ty_wasm --target wasm32-unknown-unknown --all-
 (cd crates/ruff_wasm && time wasm-pack test --node)
 (cd crates/ty_wasm && time wasm-pack test --node)
 echo "wasm built at ${SECONDS}s"
-uv sync --only-dev --group docs
+uv sync --only-group docs
+uv sync --only-dev
 uv tool install maturin
 SKIP=rustfmt uv run --only-dev --locked prek run --all-files --hook-stage manual || true
 echo "tools warmed at ${SECONDS}s"

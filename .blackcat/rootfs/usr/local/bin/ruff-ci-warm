@@ -18,8 +18,8 @@ time cargo build -p ty
 time cargo clippy --workspace --all-targets --all-features --locked
 echo "clippy built at ${SECONDS}s"
 curl -fsSL --retry 5 "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
-time cargo hawk check --target-dir target/hawk -D warnings
-echo "hawk built at ${SECONDS}s"
+# Stock hawk re-checks every crate on every run (its run id is tracked in
+# each crate's dep-info), so a warm target/hawk saves nothing; skip it.
 msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 rustup toolchain install "$msrv" --profile minimal
 rustup target add wasm32-unknown-unknown

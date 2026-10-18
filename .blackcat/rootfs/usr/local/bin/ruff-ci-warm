@@ -23,8 +23,8 @@ curl -fsSL --retry 5 "https://github.com/astral-sh/hawk/releases/download/${HAWK
 msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 rustup toolchain install "$msrv" --profile minimal
 rustup target add wasm32-unknown-unknown
-time cargo "+$msrv" test --no-run --all-features
-echo "msrv built at ${SECONDS}s"
+# The MSRV build is not warmed: its artifacts would crowd hawk out of the
+# fixed writable disk, and its own job is far from the critical path.
 time cargo clippy -p ruff_wasm -p ty_wasm --target wasm32-unknown-unknown --all-features --locked
 (cd crates/ruff_wasm && time wasm-pack test --node)
 (cd crates/ty_wasm && time wasm-pack test --node)

@@ -12,7 +12,7 @@ tar --uid 0 --gid 0 -C "$stage" -cf "$stage.tar" .
 crane mutate public.ecr.aws/docker/library/ubuntu:24.04@sha256:a61567bd31828687156d735ea8eb01ba4e37636e225dd6a48ba94136a70d9d61 \
   --platform linux/amd64 --append "$stage.tar" --entrypoint /usr/local/bin/boot --user 0 --workdir /workspace/ruff \
   -e HOME=/home/ubuntu -e CARGO_HOME=/home/ubuntu/.cargo -e RUSTUP_HOME=/home/ubuntu/.rustup \
-  -e PATH=/home/ubuntu/.cargo/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  -e PATH=/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
   -e UV_LOCKED=1 -e UV_CACHE_DIR=/home/ubuntu/.cache/uv -e UV_PYTHON_INSTALL_DIR=/home/ubuntu/.local/share/uv/python \
   -e CARGO_INCREMENTAL=0 -e CARGO_NET_RETRY=10 -e CARGO_PROFILE_DEV_LTO=false -e CARGO_PROFILE_DEV_OPT_LEVEL=0 \
   -e CARGO_PROFILE_DEV_DEBUG=line-tables-only -e CARGO_TERM_COLOR=never \

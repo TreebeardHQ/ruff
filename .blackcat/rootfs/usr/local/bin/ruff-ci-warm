@@ -20,5 +20,18 @@ echo "clippy built at ${SECONDS}s"
 curl -fsSL --retry 5 "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
 time cargo hawk check --target-dir target/hawk -D warnings
 echo "hawk built at ${SECONDS}s"
+msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+rustup toolchain install "$msrv" --profile minimal
+rustup target add wasm32-unknown-unknown
+time cargo "+$msrv" test --no-run --all-features
+echo "msrv built at ${SECONDS}s"
+time cargo clippy -p ruff_wasm -p ty_wasm --target wasm32-unknown-unknown --all-features --locked
+(cd crates/ruff_wasm && time wasm-pack test --node)
+(cd crates/ty_wasm && time wasm-pack test --node)
+echo "wasm built at ${SECONDS}s"
+uv sync --only-dev --group docs
+uv tool install maturin
+SKIP=rustfmt uv run --only-dev --locked prek run --all-files --hook-stage manual || true
+echo "tools warmed at ${SECONDS}s"
 du -sh target "$CARGO_HOME" "$RUSTUP_HOME" "$UV_CACHE_DIR" || true
 df -h /

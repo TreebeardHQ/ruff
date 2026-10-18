@@ -15,6 +15,11 @@ if [[ ! -e "$state/ready" ]]; then
     || { tail -60 "$state/warm.log" >&2; exit 1; }
   : > "$state/ready"
   chown 1000:1000 "$state/ready"
+  # The build left most of guest memory as page cache over files that are
+  # also on the captured disk; dropping it shrinks the memory image each
+  # clone must download and fault in.
+  sync
+  echo 3 > /proc/sys/vm/drop_caches
 fi
 /usr/local/bin/blackcat-guest checkpoint-ready
 # A clone claimed by the GitHub Actions connector receives a single-use JIT

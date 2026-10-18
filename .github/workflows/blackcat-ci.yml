@@ -1,0 +1,152 @@
+# The required Linux checks of ci.yaml, run on Blackcat runners whose
+# template already holds this repository's toolchains and a warm target/.
+# Every job checks the PR out over that warm tree instead of a fresh
+# checkout, so cargo only rebuilds what the PR changed. Tests are split across
+# clones with nextest partitions.
+name: Blackcat CI
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: /workspace/ruff
+
+env:
+  SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  tests:
+    name: "cargo test (linux, ${{ matrix.partition }}/3)"
+    runs-on: blackcat-ruff-ci
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3]
+    steps:
+      - &checkout
+        name: "Check out the PR over the warm tree"
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          auth=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
+          git -c "http.extraheader=AUTHORIZATION: basic $auth" fetch -q --depth=1 "https://github.com/${GITHUB_REPOSITORY}" "$SHA"
+          git checkout -q FETCH_HEAD
+      - name: "Run tests"
+        run: cargo nextest run --all-features --no-fail-fast --partition "hash:${{ matrix.partition }}/3"
+
+  docs-and-dogfood:
+    name: "doctests, rustdoc, dogfood"
+    runs-on: blackcat-ruff-ci
+    timeout-minutes: 20
+    steps:
+      - *checkout
+      - run: cargo test --doc --all-features
+      - run: uv run --quiet --python="${PYTHON_VERSION}" --project=./python/py-fuzzer cargo run --quiet -p ty check --project=./python/py-fuzzer
+      - run: uv run --quiet --project=./scripts/ty_benchmark cargo run --quiet -p ty check --project=./scripts/ty_benchmark
+      - run: cargo doc --all --no-deps
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+      - run: cargo doc --no-deps -p ty_python_semantic -p ty_python_core -p ty_module_resolver -p ty_site_packages -p ty_combine -p ty_project -p ty_ide -p ty_wasm -p ty_vendored -p ty_static -p ty -p ty_test -p ruff_db -p ruff_python_formatter --document-private-items
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+
+  clippy:
+    name: "cargo clippy"
+    runs-on: blackcat-ruff-ci
+    timeout-minutes: 20
+    env:
+      CARGO_BUILD_WARNINGS: deny
+    steps:
+      - *checkout
+      - run: cargo clippy --workspace --all-targets --all-features --locked
+      - run: cargo clippy -p ruff_wasm -p ty_wasm --target wasm32-unknown-unknown --all-features --locked
+
+  hawk:
+    name: "cargo hawk"
+    runs-on: blackcat-ruff-ci
+    timeout-minutes: 15
+    steps:
+      - *checkout
+      - run: cargo +1.99.0 hawk check --target-dir target/hawk --color=always -D warnings
+
+  wasm:
+    name: "cargo test (wasm)"
+    runs-on: blackcat-ruff-ci
+    timeout-minutes: 20
+    steps:
+      - *checkout
+      - run: cd crates/ruff_wasm && wasm-pack test --node
+      - run: cd crates/ty_wasm && wasm-pack test --node
+
+  msrv:
+    name: "cargo build (msrv)"
+    runs-on: blackcat-ruff-ci
+    timeout-minutes: 20
+    steps:
+      - *checkout
+      - run: |
+          msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          cargo "+${msrv}" test --no-run --all-features
+
+  small-checks:
+    name: "fmt, deny, shellcheck, scripts, mkdocs, prek, python package"
+    runs-on: blackcat-ruff-ci
+    timeout-minutes: 20
+    steps:
+      - *checkout
+      - name: "cargo fmt"
+        run: cargo fmt --all --check
+      - name: "cargo deny"
+        run: |
+          uv run --only-dev cargo deny --locked --all-features check licenses
+          uv run --only-dev cargo deny --locked --all-features check sources
+          uv run --no-project --locked scripts/check-cargo-bans.py
+          uv run --only-dev cargo deny --locked --all-features check bans
+      - name: "shellcheck"
+        run: git ls-files -z '*.sh' | xargs -0 -r shellcheck
+      - name: "scripts"
+        run: |
+          python3 crates/ruff_python_ast/generate.py
+          python3 crates/ruff_python_formatter/generate.py
+          test -z "$(git status --porcelain)"
+      - name: "mkdocs"
+        run: |
+          uv run scripts/transform_readme.py --target mkdocs
+          uv run scripts/generate_mkdocs.py
+          uv run scripts/check_docs_formatted.py
+          uv run --only-group=docs mkdocs build --strict -f mkdocs.yml
+          git checkout -q -- README.md
+      - name: "prek"
+        run: SKIP=rustfmt uv run --only-dev --locked prek run --all-files --show-diff-on-failure --hook-stage manual
+      - name: "python package"
+        run: |
+          python3 scripts/transform_readme.py --target pypi
+          maturin build --out "$RUNNER_TEMP/dist"
+          git checkout -q -- README.md
+          uvx --from "$(ls "$RUNNER_TEMP"/dist/*.whl)" ruff --help > /dev/null
+
+  required-checks-passed:
+    name: "all required checks passed"
+    if: always()
+    needs: [tests, docs-and-dogfood, clippy, hawk, wasm, msrv, small-checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: "Check required jobs passed"
+        working-directory: /tmp
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          failing=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"')
+          if [ -n "$failing" ]; then echo "$failing"; exit 1; fi
